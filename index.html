@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Михалыч: Цех №3</title>
+  <style>
+    :root{
+      --bg:#0b0f14;
+      --ui:#121826cc;
+      --text:#e9eef5;
+      --muted:#b9c3d1;
+      --accent:#7bd88f;
+      --danger:#ff6b6b;
+      --boss:#8fd3ff;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .app{ min-height:100vh; display:flex; flex-direction:column; }
+    .stage{
+      position:relative;
+      flex:1;
+      display:flex;
+      align-items:stretch;
+      justify-content:center;
+      overflow:hidden;
+      background:#000;
+    }
+    .bg{
+      position:absolute; inset:0;
+      background-position:center;
+      background-size:cover;
+      background-repeat:no-repeat;
+      filter:saturate(1.05) contrast(1.05);
+      transform:scale(1.02);
+    }
+    .overlay{
+      position:absolute; inset:0;
+      background:
+        radial-gradient(1200px 600px at 50% 55%, transparent 30%, rgba(0,0,0,.55) 100%),
+        linear-gradient(to top, rgba(0,0,0,.78), transparent 55%);
+      pointer-events:none;
+    }
+
+    /* Спрайты */
+    .sprite{
+      position:absolute;
+      bottom: 10%;
+      max-height: 74vh;
+      max-width: min(560px, 92vw);
+      filter: drop-shadow(0 14px 24px rgba(0,0,0,.6));
+      display:none;
+      user-select:none;
+      -webkit-user-drag:none;
+    }
+    .sprite.show{ display:block; }
+
+    #spriteCenter{ left:50%; transform:translateX(-50%); }
+    #spriteLeft  { left:18%; transform:translateX(-50%); }
+    #spriteRight { left:82%; transform:translateX(-50%); }
+
+    /* HUD */
+    .hud{
+      position:absolute; top:12px; left:12px; right:12px;
+      display:flex; gap:10px; align-items:center; justify-content:space-between;
+      pointer-events:none; font-size:14px; color:var(--muted);
+      text-shadow:0 2px 10px rgba(0,0,0,.6);
+    }
+    .hud .left, .hud .right{ display:flex; gap:10px; align-items:center; }
+    .pill{
+      background:rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:999px;
+      padding:6px 10px;
+      backdrop-filter:blur(6px);
+    }
+
+    /* Текстбокс */
+    .textbox{
+      position:absolute;
+      left:12px; right:12px; bottom:12px;
+      background:var(--ui);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      padding:14px 14px 12px 14px;
+      backdrop-filter:blur(10px);
+    }
+    .name{
+      font-weight:800;
+      margin-bottom:8px;
+      letter-spacing:.2px;
+      color:var(--accent);
+    }
+    .name.danger{ color:var(--danger); }
+    .name.boss{ color:var(--boss); }
+
+    .text{
+      line-height:1.35;
+      font-size:16px;
+      white-space:pre-wrap;
+      min-height:62px;
+    }
+
+    .choices{
+      margin-top:10px;
+      display:none;
+      gap:10px;
+      flex-direction:column;
+    }
+    .choices.show{ display:flex; }
+
+    button{
+      pointer-events:auto;
+      appearance:none;
+      border:none;
+      border-radius:12px;
+      padding:10px 12px;
+      font-weight:700;
+      cursor:pointer;
+      background:rgba(255,255,255,.10);
+      color:var(--text);
+      border:1px solid rgba(255,255,255,.12);
+      transition:transform .05s ease, background .15s ease, border-color .15s ease;
+    }
+    button:hover{ background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.18); }
+    button:active{ transform:translateY(1px); }
+    button.primary{ background:rgba(123,216,143,.18); border-color:rgba(123,216,143,.35); }
+    button.danger{ background:rgba(255,107,107,.16); border-color:rgba(255,107,107,.35); }
+
+    .controls{
+      margin-top:10px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .btnrow{ display:flex; gap:10px; flex-wrap:wrap; }
+
+    .choicebtn{
+      text-align:left;
+      width:100%;
+      padding:12px 12px;
+      border-radius:14px;
+    }
+
+    .small{ font-size:12px; color:var(--muted); }
+
+    /* эффекты */
+    .flash{ animation: flash 0.18s ease-in-out 2; }
+    @keyframes flash{
+      0%{ filter:brightness(1); }
+      50%{ filter:brightness(2.2); }
+      100%{ filter:brightness(1); }
+    }
+    .shake{ animation: shake .28s ease-in-out 1; }
+    @keyframes shake{
+      0%,100%{ transform:translateX(0); }
+      25%{ transform:translateX(-10px); }
+      75%{ transform:translateX(10px); }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage">
+    <div class="bg" id="bg"></div>
+    <div class="overlay"></div>
+
+    <!-- Три слоя для спрайтов (лево/центр/право), чтобы показывать двух персонажей -->
+    <img class="sprite" id="spriteLeft"  alt="spriteLeft" />
+    <img class="sprite" id="spriteCenter" alt="spriteCenter" />
+    <img class="sprite" id="spriteRight" alt="spriteRight" />
+
+    <div class="hud">
+      <div class="left">
+        <div class="pill" id="scenePill">Сцена: —</div>
+        <div class="pill" id="stepPill">Шаг: —</div>
+      </div>
+      <div class="right">
+        <div class="pill">Клик/Enter — дальше</div>
+      </div>
+    </div>
+
+    <div class="textbox">
+      <div class="name" id="name">—</div>
+      <div class="text" id="text">Загрузка…</div>
+
+      <div class="choices" id="choices"></div>
+
+      <div class="controls">
+        <div class="btnrow">
+          <button id="btnBack">← Назад</button>
+          <button class="primary" id="btnNext">Далее →</button>
+        </div>
+        <div class="btnrow">
+          <button id="btnSave">Сохранить</button>
+          <button id="btnLoad">Загрузить</button>
+          <button class="danger" id="btnRestart">С начала</button>
+        </div>
+      </div>
+      <div class="small">
+        Картинки в <b>assets/images/</b>. Можно открыть локально или залить на любой статический хостинг.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Пути */
+const IMG = (name) => `assets/images/${name}`;
+
+/* Спрайты персонажей (меняются по настроению) */
+const SPR = {
+  mih: {
+    normal: IMG("spr_mihalych_normal.png"),
+    tired:  IMG("spr_mihalych_tired.png"),
+    scared: IMG("spr_mihalych_scared.png"),
+    angry:  IMG("spr_mihalych_angry.png"),
+  },
+  boss: {
+    normal: IMG("spr_boss_normal.png"),
+  },
+  horror: {
+    screwdriver: IMG("spr_screwdriver_blue.png"),
+    double:     IMG("spr_double_mihalych.png"),
+    doubleSh:   IMG("spr_double_mihalych_shadow.png"),
+  }
+};
+
+/**
+ * step поля:
+ * type: "line" | "choice" | "jump"
+ * speaker: имя
+ * mood: "ok" | "danger" | "boss"
+ * text: текст
+ * bg: фон
+ * sprites: { left:..., center:..., right:... }  (любые могут быть null)
+ * effect: "flash" | "shake"
+ */
+const story = [
+  { id:"s1", label:"Ночь. Завод", steps:[
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_zavod_night.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"28 лет… выгляжу на 52.\nС четырёх лет на заводе. Электрик 5 разряда." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_panel_room.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"Но последние два месяца тут творится какая-то чертовщина…" },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_panel_room.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"Кто-то вырубает рубильники в щитовых — и молчат.\nВ ночные смены слышны шаги по галереям, но никого нет." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_panel_room.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"В старом цеху №3 (4 года как законсервирован) иногда включается свет и гудят двигатели.\nХотя кабель на вводе давно отрезан." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_panel_room.jpg"),
+      sprites:{ center: SPR.mih.normal },
+      text:"И ещё… инструменты иногда лежат не там.\nА иногда появляются новые отвёртки и кусачки, которых у меня никогда не было." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_panel_room.jpg"),
+      sprites:{ left: SPR.boss.normal, right: SPR.mih.normal },
+      text:"В одну ночную смену (20:00—8:00) приходит заявка:\n«В цехе №3 троит фаза и мигает аварийка»." },
+
+    { type:"line", speaker:"Начальник смены", mood:"boss",
+      bg: IMG("bg_panel_room.jpg"),
+      sprites:{ left: SPR.boss.normal, right: SPR.mih.normal },
+      text:"Иди, Микулич, глянь быстро, а то опять аварийку на всю площадку кинет." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_cx3_outside_night.jpg"),
+      sprites:{ center: SPR.mih.normal },
+      text:"Ладно… заявка есть заявка.\nБеру фонарь, мультиметр, сумку — и топаю в цех №3." },
+  ]},
+
+  { id:"s2", label:"Цех №3", steps:[
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_cx3_inside_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Захожу внутрь…" },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_cx3_inside_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Внутри холоднее, чем должно быть.\nПол в окалине.\nВ воздухе — запах горелой проводки." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_shield_flicker.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"На щитке мигает индикатор обрыва нуля." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_open_panel.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Открываю шкаф…" },
+
+    { type:"line", speaker:"Михалыч", mood:"danger",
+      bg: IMG("bg_open_panel.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Фазы — аккуратно затянуты.\nА нулевой провод… откушен.\nНе перебит — откушен ровно, будто кусачками." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_cx3_inside_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Начинаю искать обрыв." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_cx3_inside_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      effect:"shake",
+      text:"Слышу за спиной шаги.\nОборачиваюсь — никого." },
+
+    { type:"line", speaker:"???", mood:"danger",
+      bg: IMG("bg_cx3_inside_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Михалыч… не трогай ноль…" },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_floor_closeup.jpg"),
+      sprites:{ left: SPR.horror.screwdriver, right: SPR.mih.scared },
+      text:"На полу у ботинка — новая отвёртка с синей ручкой.\nУ меня такой никогда не было." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_floor_closeup.jpg"),
+      sprites:{ left: SPR.horror.screwdriver, right: SPR.mih.scared },
+      text:"Беру её в руки…" },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_black.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      effect:"flash",
+      text:"Свет в цеху полностью гаснет." },
+
+    { type:"choice",
+      prompt:"Выбор:",
+      bg: IMG("bg_black.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      options:[
+        { label:"А) Включить фонарь и сразу идти к выходу (осторожный путь)", jump:"endA" },
+        { label:"Б) Остаться на месте и позвать: «Кто там?» (смелый / шизный путь)", jump:"endB" },
+        { label:"В) Пойти в туалет (смешной / абсурдный путь)", jump:"endC" },
+      ]
+    },
+  ]},
+
+  { id:"endA", label:"Концовка А — Мокрый позор", steps:[
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_cx3_exit_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Включаю фонарь и быстро топаю к выходу." },
+
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_cx3_exit_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Дверь закрыта на засов изнутри.\nЯ точно не закрывал." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_cx3_exit_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Пока ковыряюсь с засовом — за спиной тяжёлое дыхание… с присвистом." },
+
+    { type:"line", speaker:"Михалыч", mood:"danger",
+      bg: IMG("bg_cx3_exit_dark.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Оборачиваюсь…" },
+
+    { type:"line", speaker:"Двойник", mood:"danger",
+      bg: IMG("bg_cx3_exit_dark.jpg"),
+      sprites:{ left: SPR.horror.double, right: SPR.mih.scared },
+      effect:"flash",
+      text:"В луче фонаря стоит… я сам.\nСиняя роба, сумка.\nЛицо бледное, глаза пустые." },
+
+    { type:"line", speaker:"Двойник-Михалыч", mood:"danger",
+      bg: IMG("bg_cx3_exit_dark.jpg"),
+      sprites:{ left: SPR.horror.double, right: SPR.mih.scared },
+      text:"Ты не должен был уходить, Микулич. Теперь поздно." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_black.jpg"),
+      sprites:{},
+      text:"Экран темнеет." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_cx3_floor_morning.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"Михалыч просыпается на полу цеха №3.\nВесь мокрый. Воняет мочой.\nОн наложил в штаны." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_cx3_door_morning.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"Смена кончилась 3 часа назад.\nКоллеги стучат в дверь:\n«Микулич! Ты живой там?!»" },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_cx3_floor_morning.jpg"),
+      sprites:{ left: SPR.horror.screwdriver, right: SPR.mih.tired },
+      text:"Концовка А — «Мокрый позор».\nМихалыч пытается встать, спотыкается о свою же отвёртку и снова падает в лужу." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_black.jpg"),
+      sprites:{},
+      text:"КОНЕЦ" },
+  ]},
+
+  { id:"endB", label:"Концовка Б — Короткое замыкание", steps:[
+    { type:"line", speaker:"Михалыч", mood:"danger",
+      bg: IMG("bg_cx3_inside_light_flicker.jpg"),
+      sprites:{ center: SPR.mih.angry },
+      effect:"flash",
+      text:"КТО ТАМ, мать вашу?! Выходи!" },
+
+    { type:"line", speaker:"Голос", mood:"danger",
+      bg: IMG("bg_cx3_inside_light_flicker.jpg"),
+      sprites:{ center: SPR.mih.angry },
+      text:"Я — это ты.\nТолько тот, который не ушёл вовремя.\nТот, который остался чинить ноль." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_corner_shadow.jpg"),
+      sprites:{ left: SPR.horror.doubleSh, right: SPR.mih.scared },
+      text:"В углу — второй Михалыч.\nБез бейджика.\nС синей отвёрткой.\nИдёт медленно, шаркая ногами." },
+
+    { type:"line", speaker:"Двойник", mood:"danger",
+      bg: IMG("bg_corner_shadow.jpg"),
+      sprites:{ left: SPR.horror.doubleSh, right: SPR.mih.scared },
+      text:"Ноль не откушен, Микулич.\nНоль — это ты.\nТы уже давно не подключён.\nСмотри." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_socket_blood.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Двойник тычет отвёрткой в стену — и из розетки начинает вытекать кровь.\nМедленно. Как из крана." },
+
+    { type:"line", speaker:"Михалыч", mood:"danger",
+      bg: IMG("bg_hands_glow.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Смотрю на руки…\nПальцы дрожат.\nКожа бледнеет.\nВены светятся синим — как оголённый провод." },
+
+    { type:"line", speaker:"Динамик", mood:"danger",
+      bg: IMG("bg_shield_flicker.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Фаза ноль, Микулич. Полный обрыв." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_glitch.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      effect:"shake",
+      text:"Экран глючит: меня дёргает, как от удара током." },
+
+    { type:"line", speaker:"Двойник", mood:"danger",
+      bg: IMG("bg_corner_shadow.jpg"),
+      sprites:{ left: SPR.horror.doubleSh, right: SPR.mih.scared },
+      text:"Давай я тебя подзаряжу.\nОткрой рот." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_many_mihalych.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"На полу появляются третьи, четвёртые Михалычи.\nВсе с отвёртками.\nВсе бормочут: «Ноль… ноль… ноль…»" },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_black.jpg"),
+      sprites:{},
+      effect:"flash",
+      text:"Концовка Б — «Короткое замыкание».\nТреск электричества.\nКадр: куча одинаковых Михалычей, слившихся в одну тень." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_black.jpg"),
+      sprites:{},
+      text:"КОНЕЦ" },
+  ]},
+
+  { id:"endC", label:"Концовка В — Фекальная катастрофа", steps:[
+    { type:"line", speaker:"Михалыч", mood:"ok",
+      bg: IMG("bg_cx3_corridor_dark.jpg"),
+      sprites:{ center: SPR.mih.normal },
+      text:"Да ну его нафиг… сначала в сортир сгоняю." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_old_toilet.jpg"),
+      sprites:{ center: SPR.mih.normal },
+      text:"Старый туалет в цеху №3.\nДыра в полу, воды нет, пахнет как могила." },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_old_toilet.jpg"),
+      sprites:{ center: SPR.mih.normal },
+      text:"Расстёгиваю ширинку…" },
+
+    { type:"line", speaker:"—", mood:"danger",
+      bg: IMG("bg_toilet_disaster.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      effect:"flash",
+      text:"ГРОМКИЙ ВЗРЫВ.\nТрубы рвутся.\nИз унитаза — фонтан фекалий и химии." },
+
+    { type:"line", speaker:"Михалыч", mood:"danger",
+      bg: IMG("bg_toilet_disaster.jpg"),
+      sprites:{ center: SPR.mih.scared },
+      text:"Пытаюсь убежать…\nНо поскользнулся.\nПадаю лицом в лужу." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_colleagues_flashlights.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"Коллеги вбегают с фонарями:\n«Микулич, ты что натворил?!»" },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_factory_foam_news.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"Оказывается: «туалетный» манёвр случайно задел главный вентиль химканализации.\nЗавод заливает стоками.\nВсё в пене и вонище." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_shower_robes.jpg"),
+      sprites:{ center: SPR.mih.tired },
+      text:"Завод закрывают на санитарную обработку на 2 месяца.\nМихалыч получает премию за «инициативу».\nНо коллеги зовут его «Король дерьма»." },
+
+    { type:"line", speaker:"—", mood:"ok",
+      bg: IMG("bg_black.jpg"),
+      sprites:{},
+      text:"Концовка В — «Фекальная катастрофа».\nКОНЕЦ" },
+  ]},
+];
+
+/* --- Состояние --- */
+let state = { sceneIndex:0, stepIndex:0, history:[] };
+
+/* DOM */
+const bgEl = document.getElementById("bg");
+const nameEl = document.getElementById("name");
+const textEl = document.getElementById("text");
+const choicesEl = document.getElementById("choices");
+const scenePill = document.getElementById("scenePill");
+const stepPill = document.getElementById("stepPill");
+const stage = document.getElementById("stage");
+
+const sprLeft  = document.getElementById("spriteLeft");
+const sprCenter= document.getElementById("spriteCenter");
+const sprRight = document.getElementById("spriteRight");
+
+function findSceneById(id){
+  const idx = story.findIndex(s => s.id === id);
+  return idx >= 0 ? idx : null;
+}
+function currentScene(){ return story[state.sceneIndex]; }
+function currentStep(){ return currentScene().steps[state.stepIndex]; }
+
+function applyEffect(effect){
+  if(!effect) return;
+  stage.classList.remove("flash","shake");
+  void stage.offsetWidth;
+  stage.classList.add(effect);
+  setTimeout(()=>stage.classList.remove(effect), 550);
+}
+
+function setSprite(el, src){
+  if(src){
+    el.src = src;
+    el.classList.add("show");
+  } else {
+    el.classList.remove("show");
+    el.removeAttribute("src");
+  }
+}
+
+function setNameStyle(mood){
+  nameEl.classList.remove("danger","boss");
+  if(mood === "danger") nameEl.classList.add("danger");
+  if(mood === "boss")   nameEl.classList.add("boss");
+}
+
+function renderStep(pushHistory=true){
+  const scene = currentScene();
+  const step = currentStep();
+
+  scenePill.textContent = `Сцена: ${scene.label}`;
+  stepPill.textContent = `Шаг: ${state.stepIndex+1}/${scene.steps.length}`;
+
+  // choices off by default
+  choicesEl.classList.remove("show");
+  choicesEl.innerHTML = "";
+
+  // bg
+  if(step.bg) bgEl.style.backgroundImage = `url('${step.bg}')`;
+
+  // sprites (left/center/right)
+  const sp = step.sprites || {};
+  setSprite(sprLeft, sp.left || null);
+  setSprite(sprCenter, sp.center || null);
+  setSprite(sprRight, sp.right || null);
+
+  if(step.type === "line"){
+    nameEl.textContent = step.speaker || "—";
+    setNameStyle(step.mood);
+    textEl.textContent = step.text || "";
+    applyEffect(step.effect);
+
+    if(pushHistory) state.history.push({sceneIndex:state.sceneIndex, stepIndex:state.stepIndex});
+  }
+
+  if(step.type === "choice"){
+    nameEl.textContent = "Выбор";
+    setNameStyle("ok");
+    textEl.textContent = step.prompt || "Выбери действие:";
+    choicesEl.classList.add("show");
+
+    (step.options || []).forEach(opt=>{
+      const btn = document.createElement("button");
+      btn.className = "choicebtn";
+      btn.textContent = opt.label;
+      btn.onclick = () => jumpTo(opt.jump);
+      choicesEl.appendChild(btn);
+    });
+
+    if(pushHistory) state.history.push({sceneIndex:state.sceneIndex, stepIndex:state.stepIndex});
+  }
+
+  if(step.type === "jump"){
+    jumpTo(step.target);
+  }
+}
+
+function next(){
+  const step = currentStep();
+  if(step.type === "choice") return;
+
+  const scene = currentScene();
+
+  // 1) если внутри сцены есть следующий шаг — идём дальше
+  if(state.stepIndex < scene.steps.length - 1){
+    state.stepIndex++;
+    renderStep(true);
+    return;
+  }
+
+  // 2) если шаги в сцене закончились — переходим на следующую сцену
+  if(state.sceneIndex < story.length - 1){
+    state.sceneIndex++;
+    state.stepIndex = 0;
+    renderStep(true);
+    return;
+  }
+
+  // 3) если это последняя сцена — остаёмся на месте
+}
+function back(){
+  if(state.history.length <= 1) return;
+  state.history.pop();
+  const prev = state.history[state.history.length - 1];
+  state.sceneIndex = prev.sceneIndex;
+  state.stepIndex = prev.stepIndex;
+  renderStep(false);
+}
+function jumpTo(sceneId){
+  const idx = findSceneById(sceneId);
+  if(idx === null){
+    nameEl.textContent = "Ошибка";
+    textEl.textContent = `Сцена "${sceneId}" не найдена.`;
+    return;
+  }
+  state.sceneIndex = idx;
+  state.stepIndex = 0;
+  renderStep(true);
+}
+function restart(){
+  state = { sceneIndex:0, stepIndex:0, history:[] };
+  renderStep(true);
+}
+
+function save(){
+  localStorage.setItem("vn_save", JSON.stringify(state));
+  alert("Сохранено в браузере.");
+}
+function load(){
+  const raw = localStorage.getItem("vn_save");
+  if(!raw){ alert("Сохранения нет."); return; }
+  try{
+    const loaded = JSON.parse(raw);
+    if(typeof loaded.sceneIndex==="number" && typeof loaded.stepIndex==="number"){
+      state = loaded;
+      renderStep(false);
+      alert("Загружено.");
+    } else alert("Сохранение повреждено.");
+  }catch(e){ alert("Не удалось загрузить."); }
+}
+
+document.getElementById("btnNext").onclick = next;
+document.getElementById("btnBack").onclick = back;
+document.getElementById("btnRestart").onclick = restart;
+document.getElementById("btnSave").onclick = save;
+document.getElementById("btnLoad").onclick = load;
+
+stage.addEventListener("click", (e)=>{
+  if(e.target.tagName.toLowerCase() === "button") return;
+  next();
+});
+window.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter" || e.key === " "){ e.preventDefault(); next(); }
+  if(e.key === "Backspace"){ e.preventDefault(); back(); }
+});
+
+restart();
+</script>
+</body>
+</html>
